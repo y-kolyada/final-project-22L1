@@ -2,10 +2,13 @@ package com.ygorod.webapp;
 
 import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.*;
+import com.ygorod.webapp.*;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class AboutTest {
     
+    About about = new About();
+
     @BeforeAll
     public void runBeforeClass(){
         System.out.println("Run before the entire test suite...");
@@ -20,11 +23,13 @@ public class AboutTest {
     public void thisTestIsSkipped(){
         System.out.println("Skipped");
     }
-
+ 
+    /*
     @Test
     public void shouldAnswerWithTrue() {
         assertTrue(true);
     }
+    */
 
     @Test
     public void assertDemo(){
