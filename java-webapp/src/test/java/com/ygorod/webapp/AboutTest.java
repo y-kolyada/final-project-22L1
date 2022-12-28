@@ -1,40 +1,60 @@
 package com.ygorod.webapp;
 
-import static org.junit.jupiter.api.Assertions.*;
+//import com.ygorod.webapp.*;
 import org.junit.jupiter.api.*;
-import com.ygorod.webapp.*;
+import static org.junit.jupiter.api.Assertions.*;
+
+//import org.junit.jupiter.api.extension.ExtendWith;
+//import org.mockito.Mock;
+//import static org.mockito.Mockito.when;
+//import org.mockito.junit.jupiter.*;
+
+//import java.io.IOException;
+//import javax.servlet.ServletException;
+//import java.io.PrintWriter;
+//import java.io.StringWriter;
+//import javax.servlet.http.HttpServletRequest;
+//import javax.servlet.http.HttpServletResponse;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+//@ExtendWith(MockitoExtension.class)
 public class AboutTest {
-    
-    About about = new About();
+    //private HttpServletRequest request;
+    //private HttpServletResponse response;
 
     @BeforeAll
-    public void runBeforeClass(){
+    public void runBeforeClass() {
         System.out.println("Run before the entire test suite...");
     }
 
     @BeforeEach
-    public void runBeforeEachTest(){
+    public void runBeforeEachTest() {
         System.out.println("Run before each test...");
     }
 
     @Disabled
-    public void thisTestIsSkipped(){
+    public void thisTestIsSkipped() {
         System.out.println("Skipped");
     }
- 
-    /*
+    
     @Test
-    public void shouldAnswerWithTrue() {
+    public void thisTestIsOk() {
+        String methodName = new Object() {}
+            .getClass()
+            .getEnclosingMethod()
+            .getName();
+        System.out.println("Test " + methodName + "() is in progress..." );
         assertTrue(true);
     }
-    */
 
+    /*
     @Test
-    public void assertDemo(){
-        int expected = 10;
-        int actual = -10;
-        assertEquals(expected, actual, "assertDemo fails");
+    public void testServletServerContentType() throws IOException, ServletException {
+        About about = new About();
+
+        about.doGet(request, response);
+        String contentType = response.getContentType();
+        assertEquals("text/html", contentType);
     }
+    */
 }
