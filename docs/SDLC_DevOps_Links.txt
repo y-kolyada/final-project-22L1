@@ -1,0 +1,48 @@
+# +++ What is DevOps?
+# +++ https://www.clouddefense.ai/blog/what-is-devops
+# https://www.dynatrace.com/news/blog/what-is-devops/
+# https://en.wikipedia.org/wiki/DevOps_toolchain
+
+# What Does a Chief Software Architect Do?
+# https://fullscale.io/blog/what-does-a-chief-software-architect-do/
+
+# CTO vs Software Architect in the USA, UK, Germany, Denmark, and Ukraine
+# https://mobilunity.com/blog/chief-software-architect-vs-cto/
+
+# Software Architect Job Description: Top Duties and Qualifications
+# https://www.indeed.com/%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BE%D0%B4%D0%B0%D1%82%D0%B5%D0%BB%D1%8C/job-description/software-architect
+
+# CSO
+# https://en.wikipedia.org/wiki/CSO
+
+# Bizagi creating a process
+# https://help.bizagi.com/process-modeler/en/index.html?documenting_a_process.htm
+
+# System Development Life Cycle Guide
+# https://www.clouddefense.ai/blog/system-development-life-cycle
+# +++ https://www.softwaretestinghelp.com/software-development-life-cycle-sdlc/
+# https://theproductmanager.com/topics/software-development-life-cycle/
+
+# Understanding the App Development Life Cycle
+# https://www.clouddefense.ai/blog/understanding-app-development-life-cycle
+
+# 10 Best Practices for Software Testing Projects
+# https://www.clouddefense.ai/blog/10-best-practices-for-software-testing-projects
+
+# devopsdays
+https://devopsdays.org/
+
+# Most Common DevOpsTools
+# 01 - GitHub‍ (Bitbucket, GitLab)
+# 02 - Ansible (Solt, Puppet)
+# 03 - Docker‍ (Podman)
+# 04 - Kubernetes
+# 05 - Terraform
+# 06 - Vagrant‍
+# 07 - Sentry
+# 08 - Maven (Gladle)
+# 09 - Jenkins
+# 10 - Nagios
+
+
+
