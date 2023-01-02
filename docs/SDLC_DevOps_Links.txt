@@ -29,24 +29,21 @@
 # 10 Best Practices for Software Testing Projects
 # https://www.clouddefense.ai/blog/10-best-practices-for-software-testing-projects
 
-# devopsdays
+# Devopsdays
 https://devopsdays.org/
 
-# Most Common DevOpsTools
-# 00 - Linux
-# 01 - VirtualBox (KVM)
-# 02 - AWS (Azure, GCP)
-# 06 - Vagrant‍ (Foreman)
-# 01 - GitHub‍ (Bitbucket, GitLab)
-# 02 - Ansible (Solt, Puppet)
-# 03 - Docker‍ (Podman)
-# 04 - Kubernetes
-# 05 - Terraform
-
-# 07 - Sentry
-# 08 - Maven (Gladle)
-# 09 - Jenkins
-# 10 - Nagios
-
-
-
+# Most Common DevOps Tools
+# 00 + Linux & bash (CentOS, Ubuntu), 2
+# 01 + Git & GitHub‍ (GitLab, Bitbucket), 1/3
+# 02 + VirtualBox for Linux (KVM), 2/5
+# 03 + Vagrant‍ (Foreman), 2/7
+# 04 ~ AWS (Azure, GCP)
+# 05 + Terraform, 2/9
+# 06 + Ansible (Solt, Puppet), 3/11
+# 07 + Docker‍ (Podman), 2/14
+# 08 - (Kubernetes)
+# 09 - (Sentry)
+# 10 - Java
+# 11 + Maven (Gladle), 1/15
+# 12 + Jenkins, 3/17
+# 13 - Nagios (Prometheus, Grafana)
