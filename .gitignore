@@ -1,3 +1,4 @@
 *.class
 *.jar
 TEST-com.ygorod.webapp.AboutTest.xml
+vagrant/Vagrantfile.orig

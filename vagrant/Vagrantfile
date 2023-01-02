@@ -1,105 +1,110 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+
+set_server_multi_user_target = <<-SHELL
+  dnf groupinstall -y "Server"
+  dnf groupremove -y "Workstation"
+  dnf groupremove -y "Server with GIU"
+  systemctl set-default multi-user.target
+  systemctl get-default 
+  dnf -y update
+SHELL
+
+set_server_gui_multi_user_target = <<-SHELL
+  dnf groupinstall -y "Server with GIU"
+  dnf groupremove -y "Workstation"
+  dnf groupremove -y "Server"
+  systemctl set-default graphical.target
+  systemctl get-default 
+  dnf -y update
+SHELL
+
+set_workstation_graphical_target = <<-SHELL
+  dnf groupinstall -y "Workstation"
+  dnf groupremove -y "Server"
+  dnf groupremove -y "Server with GIU"
+  systemctl set-default graphical.target
+  systemctl get-default 
+  dnf -y update
+SHELL
+
+get_current_default_kernel = <<-SHELL
+  #grubby --set-default /boot/vmlinuz-4.18.0-408.el8.x86_64
+  config.vm.provision "get-current-default-kernel", type: "shell", run: "never", inline: <<-SHELL
+  rpm -q kernel
+  ls /boot/vm*
+  grubby --default-kernel  
+  dnf -y remove --oldinstallonly --setopt installonly_limit=2 kernel
+SHELL
+
+update_kernel = <<-SHELL
+  dnf update -y kernel-*  
+SHELL
+
+update_system = <<-SHELL
+  dnf update -y  
+SHELL
+
+install_virtualbox_guets_additions = <<-SHELL
+  #dnf install -y gcc make perl kernel-devel kernel-headers bzip2 dkms
+  dnf install -y epel-release
+  dnf install -y gcc make perl kernel-devel kernel-headers bzip2 dkms
+  rpm -q kernel
+  wget -q https://download.virtualbox.org/virtualbox/7.0.4/VBoxGuestAdditions_7.0.4.iso -P /tmp
+  mkdir -p /mnt/GA
+  mount /tmp/VBoxGuestAdditions_7.0.4.iso /mnt/GA
+  cd /mnt/GA
+  sh ./VBoxLinuxAdditions.run install
+  #systemctl disable vboxadd-service
+  #systemctl disable vboxadd
+  #systemctl stop vboxadd-service
+  #systemctl stop vboxadd
+SHELL
+
 Vagrant.configure("2") do |config|
   # https://docs.vagrantup.com.
   # https://vagrantcloud.com/search.
   config.vm.box = "centos/stream8"
   config.vm.box_version = "20210210.0"
-  config.vm.define "dev001"
-  config.vm.host_name = "dev001"
-  config.vm.provider "virtualbox" do |v|
-    v.gui = true
-    v.name = "dev001"
-    v.memory = 3072
-    v.cpus = 2
-    v.check_guest_additions = false
-    v.customize ["modifyvm", :id, "--graphicscontroller", "VMSVGA"] 
-    v.customize ["modifyvm", :id, "--vram", "128"] 
-  end
+  config.vm.define "dev001" do |dev001|
+    dev001.vm.host_name = "dev001"
+    dev001.vm.provider "virtualbox" do |v|
+      v.gui = true
+      v.name = "dev001"
+      v.memory = 3072
+      v.cpus = 2
+      v.check_guest_additions = false
+      v.customize ["modifyvm", :id, "--graphicscontroller", "VMSVGA"] 
+      v.customize ["modifyvm", :id, "--vram", "128"] 
+    end
+
+    #config.vm.network "public_network", auto_config: false
+    dev001.vm.network "public_network", bridge: 'enp8s0', ip: "10.0.10.50"
+    dev001.vm.provision "remove-default-route-for-eth0", type: "shell", run: "always", 
+      inline: <<-SHELL
+        ip route del default via 10.0.2.2 dev eth0
+        ip route add default via 10.0.10.1 dev eth1
+      SHELL
+
+    dev001.vm.provision "set_workstation_graphical_target", type: "shell", run: "once", 
+      inline: set_workstation_graphical_target
+
+    dev001.vm.provision "get_current_default_kernel", type: "shell", run: "never", 
+      inline: get_current_default_kernel
+
+    dev001.vm.provision "install_virtualbox_guets_additions", type: "shell", run: "never", 
+      inline: install_virtualbox_guets_additions
+  end  
 
   if Vagrant.has_plugin?("vagrant-vbguest")
-    config.vbguest.auto_update = false
+    config.vbguest.auto_update = true
   end
 
-  #config.vm.network "public_network", auto_config: false
-  config.vm.network "public_network", bridge: 'enp8s0'
-  config.vm.provision "remove-default-route-for-eth0", type: "shell", inline: <<-SHELL
-    ip route del default via 10.0.2.2 dev eth0
-  SHELL
+  config.vm.provision "update-kernel", type: "shell", run: "once", 
+    inline: update_kernel    
   
-  #systemctl set-default multi-user.target
-  #dnf groupinstall -y "Server"
-  #dnf groupremove -y "Server with GUI", "Server", "Workstation"
-  config.vm.provision "set-multi-user-or-graphical-target", type: "shell", inline: <<-SHELL
-    dnf groupinstall -y "Workstation"
-    dnf groupremove -y nServer"
-    dnf groupremover-y "Server with GIU"
-    systemctl set-default graphical.target
-    systemctl get-default 
-    dnf -y update
-  SHELL
+  config.vm.provision "update-system", type: "shell", run: "always", 
+    inline: update_system
 
-  #grubby --set-default /boot/vmlinuz-4.18.0-408.el8.x86_64
-  config.vm.provision "get-current-default-kernel", type: "shell", run: "never", inline: <<-SHELL
-    rpm -q kernel
-    ls /boot/vm*
-    grubby --default-kernel  
-    dnf -y remove --oldinstallonly --setopt installonly_limit=2 kernel
-  SHELL
-
-  config.vm.provision "update-kernel", type: "shell", run: "once", inline: <<-SHELL
-    dnf update -y kernel-*  
-  SHELL
-  
-  config.vm.provision "update-system", type: "shell", run: "always", inline: <<-SHELL
-    dnf update -y  
-  SHELL
-
-  #dnf install -y gcc make perl kernel-devel kernel-headers bzip2 dkms
-  config.vm.provision "install-virtualbox-guets-additions", type: "shell", run: "never", inline: <<-SHELL
-    dnf install -y epel-release
-    dnf install -y gcc make perl kernel-devel kernel-headers bzip2 dkms
-    rpm -q kernel
-    wget -q https://download.virtualbox.org/virtualbox/7.0.4/VBoxGuestAdditions_7.0.4.iso -P /tmp
-    mkdir -p /mnt/GA
-    mount /tmp/VBoxGuestAdditions_7.0.4.iso /mnt/GA
-    cd /mnt/GA
-    sh ./VBoxLinuxAdditions.run install
-    #systemctl disable vboxadd-service
-    #systemctl disable vboxadd
-    #systemctl stop vboxadd-service
-    #systemctl stop vboxadd
-  SHELL
-
-  # Disable automatic box update checking. If you disable this, then
-  # boxes will only be checked for updates when the user runs
-  # `vagrant box outdated`. This is not recommended.
-  # config.vm.box_check_update = false
-
-  # Create a forwarded port mapping which allows access to a specific port
-  # within the machine from a port on the host machine. In the example below,
-  # accessing "localhost:8080" will access port 80 on the guest machine.
-  # NOTE: This will enable public access to the opened port
-  # config.vm.network "forwarded_port", guest: 80, host: 8080
-
-  # Create a forwarded port mapping which allows access to a specific port
-  # within the machine from a port on the host machine and only allow access
-  # via 127.0.0.1 to disable public access
-  # config.vm.network "forwarded_port", guest: 80, host: 8080, host_ip: "127.0.0.1"
-
-  # Create a private network, which allows host-only access to the machine
-  # using a specific IP.
-  # config.vm.network "private_network", ip: "192.168.33.10"
-
-  # Create a public network, which generally matched to bridged network.
-  # Bridged networks make the machine appear as another physical device on
-  # your network.
-  # config.vm.network "public_network"
-
-  # Share an additional folder to the guest VM. The first argument is
-  # the path on the host to the actual folder. The second argument is
-  # the path on the guest to mount the folder. And the optional third
-  # argument is a set of non-required options.
-  # config.vm.synced_folder "../data", "/vagrant_data"
 end
