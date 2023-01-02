@@ -33,12 +33,16 @@
 https://devopsdays.org/
 
 # Most Common DevOpsTools
+# 00 - Linux
+# 01 - VirtualBox (KVM)
+# 02 - AWS (Azure, GCP)
+# 06 - Vagrant‍ (Foreman)
 # 01 - GitHub‍ (Bitbucket, GitLab)
 # 02 - Ansible (Solt, Puppet)
 # 03 - Docker‍ (Podman)
 # 04 - Kubernetes
 # 05 - Terraform
-# 06 - Vagrant‍
+
 # 07 - Sentry
 # 08 - Maven (Gladle)
 # 09 - Jenkins
