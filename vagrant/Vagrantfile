@@ -1,15 +1,30 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+=begin
+  Vagrant script to build CORP, DEV, QA, INTEG and PROD environment
+=end
+
+box = "centos/stream8"
+version = "20210210.0"
+
+servers = [
+  { :hostname => "dev", :box => "centos/stream8", :version => "20210210.0", 
+    :ram => 3072, :cpu => 2, :host_port => 22251, :guest_ip => "10.0.10.51" }
+]
+
+devs = [
+  { :hostname => "dev001", :box => "centos/stream8", :version => "20210210.0", 
+    :ram => 3072, :cpu => 2, :host_port => 22261, :guest_ip => "10.0.10.61" }
+]
+
 SSH_PORT_SUFFIX = 50
+IP_PREFFIX = "10.0.10."
+IP_SUFFIX = 50
 $GW_IP = "10.0.10.1"
 $HOST_IP = "10.0.10.2"
 $DEV001_IP = "10.0.10.60"
 $DEV_IP = "10.0.10.50"
-
-=begin
-  Vagrant script to build DEV, QA, INTEG and PROD environment
-=end
 
 set_server_multi_user_target = <<-SHELL
   dnf groupinstall -y "Server"
@@ -57,7 +72,6 @@ update_system = <<-SHELL
   dnf update -y  
 SHELL
 
-
 change_default_route = <<-SHELL
   echo "GW_IP: ${GW_IP}"
   RM_ROUTE=$(ip route | grep "default via 10.0.2.2 dev eth0")
@@ -93,65 +107,100 @@ Vagrant.configure("2") do |config|
   config.vm.box_version = "20210210.0"
   
   ### CORP Environment: Developers workstations
-  config.vm.define "dev001" do |dev001|
-    dev001.vm.host_name = "dev001"
-    dev001.vm.provider "virtualbox" do |v|
-      v.gui = true
-      v.name = "dev001"
-      v.memory = 3072
-      v.cpus = 2
-      v.check_guest_additions = false
-      v.customize ["modifyvm", :id, "--graphicscontroller", "VMSVGA"] 
-      v.customize ["modifyvm", :id, "--vram", "128"] 
-    end
+  i = 0
+  devs.each do |dev|
+    i += 1
+    box_image = dev[:box] ? dev[:box] : box
+    box_version = dev[:version] ? dev[:version] : version
+    config.vm.define dev[:hostname] do |conf|
+      # VM conf
+      conf.vm.box = box_image.to_s
+      conf.vm.box_version = box_version.to_s
+      conf.vm.host_name = dev[:hostname]
+      
+      cpu = dev[:cpu] ? dev[:cpu] : 1;
+      memory = dev[:ram] ? dev[:ram] : 512
+      conf.vm.provider "virtualbox" do |v|
+        v.gui = true
+        v.name = dev[:hostname]
+        v.memory = memory.to_s
+        v.cpus = cpu.to_s
+        v.check_guest_additions = false
+        v.customize ["modifyvm", :id, "--graphicscontroller", "VMSVGA"] 
+        v.customize ["modifyvm", :id, "--vram", "128"] 
+      end
 
-    #config.vm.network "public_network", auto_config: false
-    dev001.vm.network :forwarded_port, guest: 22, host: "222#{SSH_PORT_SUFFIX+10}", 
-      host_ip: "127.0.0.1", id: "ssh"
-    dev001.vm.network "public_network", bridge: 'enp8s0', ip: $DEV001_IP
+      # SSH conf
+      host_port = dev[:host_port] ? dev[:host_port] : "222#{SSH_PORT_SUFFIX + 10 + i}"
+      conf.vm.network :forwarded_port, guest: 22, host: host_port.to_s, 
+        host_ip: "127.0.0.1", id: "ssh"
 
-    dev001.vm.provision "change_default_route", type: "shell", run: "always", 
-      env: {"GW_IP" => $GW_IP}, inline: change_default_route
+      # Net conf
+      guest_ip = dev[:guest_ip] ? dev[:guest_ip] : IP_PREFFIX + "#{IP_SUFFIX + 10 + i}"
+      conf.vm.network "public_network", bridge: 'enp8s0', ip: guest_ip
+      
+      conf.vm.provision "change_default_route", type: "shell", run: "always", 
+        env: {"GW_IP" => $GW_IP}, inline: change_default_route
 
-    dev001.vm.provision "set_workstation_graphical_target", type: "shell", run: "once", 
+      # OS Conf
+      conf.vm.provision "set_workstation_graphical_target", type: "shell", run: "once", 
       inline: set_workstation_graphical_target
 
-    dev001.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
-      inline: get_current_default_kernel
+      conf.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
+        inline: get_current_default_kernel
 
-    dev001.vm.provision "install_virtualbox_guets_additions", type: "shell", run: "never", 
-      inline: install_virtualbox_guets_additions
-  end  
-
-  ### DEV Environment
-  config.vm.define "dev" do |dev|
-    dev.vm.host_name = "dev"
-    dev.vm.provider "virtualbox" do |v|
-      v.gui = true
-      v.name = "dev"
-      v.memory = 3072
-      v.cpus = 2
-      v.check_guest_additions = false
-      v.customize ["modifyvm", :id, "--graphicscontroller", "VMSVGA"] 
-      v.customize ["modifyvm", :id, "--vram", "128"] 
+      conf.vm.provision "install_virtualbox_guets_additions", type: "shell", run: "never", 
+        inline: install_virtualbox_guets_additions
     end
-
-    #config.vm.network "public_network", auto_config: false
-    dev.vm.network :forwarded_port, guest: 22, host: "222#{SSH_PORT_SUFFIX}", id: "ssh"
-    dev.vm.network "public_network", bridge: 'enp8s0', ip: $DEV_IP
-  	
-    dev.vm.provision "change_default_route", type: "shell", run: "always", 
-      env: {"GW_IP" => $GW_IP}, inline: change_default_route
-
-    dev.vm.provision "set_server_multi_user_target", type: "shell", run: "once", 
-      inline: set_server_multi_user_target
-
-    dev.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
-      inline: get_current_default_kernel
-
-    dev.vm.provision "install_virtualbox_guets_additions", type: "shell", run: "never", 
-      inline: install_virtualbox_guets_additions
   end
+  
+  ### DEV, QA, INTEG, PROD Environment
+  i = 0
+  servers.each do |server|
+    i += 1
+    box_image = server[:box] ? server[:box] : box
+    box_version = server[:version] ? server[:version] : version
+    config.vm.define server[:hostname] do |conf|
+      # VM conf
+      conf.vm.box = box_image.to_s
+      conf.vm.box_version = box_version.to_s
+      conf.vm.host_name = server[:hostname]
+      
+      cpu = server[:cpu] ? server[:cpu] : 1;
+      memory = server[:ram] ? server[:ram] : 512
+      conf.vm.provider "virtualbox" do |v|
+        v.gui = true
+        v.name = server[:hostname]
+        v.memory = memory.to_s
+        v.cpus = cpu.to_s
+        v.check_guest_additions = false
+        v.customize ["modifyvm", :id, "--graphicscontroller", "VMSVGA"] 
+        v.customize ["modifyvm", :id, "--vram", "128"] 
+      end
+
+      # SSH conf
+      host_port = server[:host_port] ? server[:host_port] : "222#{SSH_PORT_SUFFIX + i}"
+      conf.vm.network :forwarded_port, guest: 22, host: host_port.to_s, 
+        host_ip: "127.0.0.1", id: "ssh"
+      
+      # Net conf
+      guest_ip = server[:guest_ip] ? server[:guest_ip] : IP_PREFFIX + "#{IP_SUFFIX + i}"
+      conf.vm.network "public_network", bridge: 'enp8s0', ip: guest_ip
+
+      conf.vm.provision "change_default_route", type: "shell", run: "always", 
+        env: {"GW_IP" => $GW_IP}, inline: change_default_route
+
+      # OS Conf      
+      conf.vm.provision "set_server_multi_user_target", type: "shell", run: "once", 
+        inline: set_server_multi_user_target
+
+      conf.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
+        inline: get_current_default_kernel
+
+      conf.vm.provision "install_virtualbox_guets_additions", type: "shell", run: "never", 
+        inline: install_virtualbox_guets_additions
+    end
+  end  
 
   if Vagrant.has_plugin?("vagrant-vbguest")
     config.vbguest.auto_update = true
