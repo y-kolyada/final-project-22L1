@@ -10,7 +10,13 @@ version = "20210210.0"
 
 servers = [
   { :hostname => "dev", :box => "centos/stream8", :version => "20210210.0", 
-    :ram => 3072, :cpu => 2, :host_port => 22251, :guest_ip => "10.0.10.51" }
+    :ram => 3072, :cpu => 2, :host_port => 22251, :guest_ip => "10.0.10.51" },
+  { :hostname => "qa", :box => "centos/stream8", :version => "20210210.0", 
+    :ram => 3072, :cpu => 2, :host_port => 22252, :guest_ip => "10.0.10.52" },
+  { :hostname => "integ", :box => "centos/stream8", :version => "20210210.0", 
+    :ram => 3072, :cpu => 2, :host_port => 22253, :guest_ip => "10.0.10.53" },
+  { :hostname => "prod", :box => "centos/stream8", :version => "20210210.0", 
+    :ram => 3072, :cpu => 2, :host_port => 22254, :guest_ip => "10.0.10.54" }
 ]
 
 devs = [
