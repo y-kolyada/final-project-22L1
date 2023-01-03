@@ -3,8 +3,13 @@
 
 SSH_PORT_SUFFIX = 50
 $GW_IP = "10.0.10.1"
+$HOST_IP = "10.0.10.2"
 $DEV001_IP = "10.0.10.60"
 $DEV_IP = "10.0.10.50"
+
+=begin
+  Vagrant script to build DEV, QA, INTEG and PROD environment
+=end
 
 set_server_multi_user_target = <<-SHELL
   dnf groupinstall -y "Server"
@@ -38,6 +43,9 @@ get_current_default_kernel = <<-SHELL
   rpm -q kernel
   ls /boot/vm*
   grubby --default-kernel  
+SHELL
+
+remove_old_kernels = <<-SHELL
   dnf -y remove --oldinstallonly --setopt installonly_limit=2 kernel
 SHELL
 
@@ -47,6 +55,19 @@ SHELL
 
 update_system = <<-SHELL
   dnf update -y  
+SHELL
+
+
+change_default_route = <<-SHELL
+  echo "GW_IP: ${GW_IP}"
+  RM_ROUTE=$(ip route | grep "default via 10.0.2.2 dev eth0")
+  if [[ $RM_ROUTE == *"default via 10.0.2.2 dev eth0"* ]]; then
+    ip route del default via 10.0.2.2 dev eth0
+  fi
+  RM_ROUTE=$(ip route | grep "default via 10.0.10.1 dev eth1")
+  if [[ -z $RM_ROUTE ]]; then
+    ip route add default via ${GW_IP} dev eth1
+  fi
 SHELL
 
 install_virtualbox_guets_additions = <<-SHELL
@@ -85,20 +106,17 @@ Vagrant.configure("2") do |config|
     end
 
     #config.vm.network "public_network", auto_config: false
-    dev001.vm.network :forwarded_port, guest: 22, host: "222#{SSH_PORT_SUFFIX+10}", id: "ssh"
+    dev001.vm.network :forwarded_port, guest: 22, host: "222#{SSH_PORT_SUFFIX+10}", 
+      host_ip: "127.0.0.1", id: "ssh"
     dev001.vm.network "public_network", bridge: 'enp8s0', ip: $DEV001_IP
 
-    dev001.vm.provision "remove-default-route-for-eth0", type: "shell", run: "always", 
-    env: {"GW_IP" => $GW_IP}, inline: <<-SHELL
-        echo "GW_IP: ${GW_IP}"
-        ip route del default via 10.0.2.2 dev eth0
-        ip route add default via ${GW_IP} dev eth1
-      SHELL
+    dev001.vm.provision "change_default_route", type: "shell", run: "always", 
+      env: {"GW_IP" => $GW_IP}, inline: change_default_route
 
     dev001.vm.provision "set_workstation_graphical_target", type: "shell", run: "once", 
       inline: set_workstation_graphical_target
 
-    dev001.vm.provision "get_current_default_kernel", type: "shell", run: "never", 
+    dev001.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
       inline: get_current_default_kernel
 
     dev001.vm.provision "install_virtualbox_guets_additions", type: "shell", run: "never", 
@@ -121,18 +139,14 @@ Vagrant.configure("2") do |config|
     #config.vm.network "public_network", auto_config: false
     dev.vm.network :forwarded_port, guest: 22, host: "222#{SSH_PORT_SUFFIX}", id: "ssh"
     dev.vm.network "public_network", bridge: 'enp8s0', ip: $DEV_IP
-
-    dev.vm.provision "remove-default-route-for-eth0", type: "shell", run: "always", 
-      env: {"GW_IP" => $GW_IP}, inline: <<-SHELL
-        echo "GW_IP: ${GW_IP}"
-        ip route del default via 10.0.2.2 dev eth0
-        ip route add default via ${GW_IP} dev eth1
-      SHELL
+  	
+    dev.vm.provision "change_default_route", type: "shell", run: "always", 
+      env: {"GW_IP" => $GW_IP}, inline: change_default_route
 
     dev.vm.provision "set_server_multi_user_target", type: "shell", run: "once", 
       inline: set_server_multi_user_target
 
-    dev.vm.provision "get_current_default_kernel", type: "shell", run: "never", 
+    dev.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
       inline: get_current_default_kernel
 
     dev.vm.provision "install_virtualbox_guets_additions", type: "shell", run: "never", 
@@ -144,7 +158,10 @@ Vagrant.configure("2") do |config|
   end
 
   config.vm.provision "update_kernel", type: "shell", run: "once", 
-    inline: update_kernel    
+    inline: update_kernel
+ 
+  config.vm.provision "remove_old_kernels", type: "shell", run: "never", 
+    inline: remove_old_kernels
   
   config.vm.provision "update_system", type: "shell", run: "always", 
     inline: update_system
