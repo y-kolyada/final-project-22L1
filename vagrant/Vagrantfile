@@ -107,7 +107,15 @@ SHELL
 install_python39 = <<-SHELL
   dnf install -y epel-release
   dnf install -y python39
-  alternatives --set python $(which python3.9)
+  #alternatives --set python $(which python3.9)
+SHELL
+
+set_alternatives = <<-SHELL    
+  alternatives --remove-all python
+  alternatives --install /usr/bin/python python /usr/bin/python3.9 111 --family python
+  # alternatives --set python /usr/bin/python3.9
+  # alternatives --config python <<< '1'
+  alternatives --list | grep python
 SHELL
 
 Vagrant.configure("2") do |config|
@@ -225,7 +233,10 @@ Vagrant.configure("2") do |config|
   config.vm.provision "update_system", type: "shell", run: "always", 
     inline: update_system
 
-  configure.vm.provision "install_python39", type: "shell", run "once",
+  config.vm.provision "install_python39", type: "shell", run: "once",
     inline: install_python39
+
+  config.vm.provision "set_alternatives", type: "shell", run: "once",
+    inline: set_alternatives
 
 end
