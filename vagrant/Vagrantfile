@@ -30,8 +30,13 @@ IP_SUFFIX = 50
 $GW_IP = "10.0.10.1"
 $HOST_IP = "10.0.10.2"
 
+$mark_provisioning = <<-'SHELL'
+ echo "\"$USER\" provisioned the guest at: " > /etc/vagrant_provisioned_at
+ date >> /etc/vagrant_provisioned_at 
+SHELL
+
 set_server_multi_user_target = <<-SHELL
-  dnf groupinstall -y "Server"
+  dnf groupinstall -y -q "Server"
   dnf groupremove -y "Workstation"
   dnf groupremove -y "Server with GIU"
   systemctl set-default multi-user.target
@@ -40,7 +45,7 @@ set_server_multi_user_target = <<-SHELL
 SHELL
 
 set_server_gui_multi_user_target = <<-SHELL
-  dnf groupinstall -y "Server with GIU"
+  dnf groupinstall -y -q "Server with GIU"
   dnf groupremove -y "Workstation"
   dnf groupremove -y "Server"
   systemctl set-default graphical.target
@@ -49,7 +54,7 @@ set_server_gui_multi_user_target = <<-SHELL
 SHELL
 
 set_workstation_graphical_target = <<-SHELL
-  dnf groupinstall -y "Workstation"
+  dnf groupinstall -y -q "Workstation"
   dnf groupremove -y "Server"
   dnf groupremove -y "Server with GIU"
   systemctl set-default graphical.target
@@ -66,6 +71,8 @@ SHELL
 
 remove_old_kernels = <<-SHELL
   dnf -y remove --oldinstallonly --setopt installonly_limit=2 kernel
+  VAGRANT_ERROR=$?
+  # echo "Exit status: $VAGRANT_ERROR"
 SHELL
 
 update_kernel = <<-SHELL
@@ -73,7 +80,8 @@ update_kernel = <<-SHELL
 SHELL
 
 update_system = <<-SHELL
-  dnf update -y  
+  dnf update -y --exclude="kernel-*"
+  VAGRANT_ERROR=$?
 SHELL
 
 change_default_route = <<-SHELL
@@ -108,6 +116,7 @@ install_python39 = <<-SHELL
   dnf install -y epel-release
   dnf install -y python39
   #alternatives --set python $(which python3.9)
+  #python3 -m ensurepip --upgrade
 SHELL
 
 set_alternatives = <<-SHELL    
@@ -157,18 +166,21 @@ Vagrant.configure("2") do |config|
       guest_ip = dev[:guest_ip] ? dev[:guest_ip] : IP_PREFFIX + "#{IP_SUFFIX + 10 + i}"
       conf.vm.network "public_network", bridge: 'enp8s0', ip: guest_ip
       
-      conf.vm.provision "change_default_route", type: "shell", run: "always", 
-        env: {"GW_IP" => $GW_IP}, inline: change_default_route
-
       # OS Conf
       conf.vm.provision "set_workstation_graphical_target", type: "shell", run: "once", 
-      inline: set_workstation_graphical_target
+        inline: set_workstation_graphical_target
+
+      conf.vm.provision "install_virtualbox_guets_additions", type: "shell", run: "never", 
+        inline: install_virtualbox_guets_additions
 
       conf.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
         inline: get_current_default_kernel
 
-      conf.vm.provision "install_virtualbox_guets_additions", type: "shell", run: "never", 
-        inline: install_virtualbox_guets_additions
+      conf.vm.provision "mark_provisioning", type: "shell", run: "always", 
+        inline: $mark_provisioning
+
+      config.vm.provision "update_system", type: "shell", run: "always", 
+        inline: update_system
     end
   end
   
@@ -197,6 +209,8 @@ Vagrant.configure("2") do |config|
       end
 
       # SSH conf
+      # Generate a new SSH key for each VM
+      conf.ssh.insert_key = true
       host_port = server[:host_port] ? server[:host_port] : "222#{SSH_PORT_SUFFIX + i}"
       conf.vm.network :forwarded_port, guest: 22, host: host_port.to_s, 
         host_ip: "127.0.0.1", id: "ssh"
@@ -205,9 +219,6 @@ Vagrant.configure("2") do |config|
       guest_ip = server[:guest_ip] ? server[:guest_ip] : IP_PREFFIX + "#{IP_SUFFIX + i}"
       conf.vm.network "public_network", bridge: 'enp8s0', ip: guest_ip
 
-      conf.vm.provision "change_default_route", type: "shell", run: "always", 
-        env: {"GW_IP" => $GW_IP}, inline: change_default_route
-
       # OS Conf      
       conf.vm.provision "set_server_multi_user_target", type: "shell", run: "once", 
         inline: set_server_multi_user_target
@@ -215,28 +226,55 @@ Vagrant.configure("2") do |config|
       conf.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
         inline: get_current_default_kernel
 
-      conf.vm.provision "install_virtualbox_guets_additions", type: "shell", run: "never", 
-        inline: install_virtualbox_guets_additions
+      conf.vm.provision "mark_provisioning", type: "shell", run: "always", 
+        inline: $mark_provisioning
+
+      config.vm.provision "update_system", type: "shell", run: "always", 
+        inline: update_system
     end
   end  
 
-  if Vagrant.has_plugin?("vagrant-vbguest")
-    config.vbguest.auto_update = true
+  if Vagrant.has_plugin?("vagrant-vbguest")    
+    config.vm.box_check_update = false 
+    config.vbguest.auto_update = false 
   end
 
-  config.vm.provision "update_kernel", type: "shell", run: "once", 
+  # OS Conf common
+  config.vm.provision "update_kernel", type: "shell", run: "never", 
     inline: update_kernel
- 
-  config.vm.provision "remove_old_kernels", type: "shell", run: "never", 
-    inline: remove_old_kernels
   
-  config.vm.provision "update_system", type: "shell", run: "always", 
-    inline: update_system
+  config.vm.provision "remove_old_kernels", type: "shell", run: "once", 
+    env: {"VAGRANT_ERROR" => 0}, inline: remove_old_kernels
 
+  if ENV["VAGRANT_ERROR"] != 0 then
+    config.vm.provision "check_new_kernel", type: "shell", run: "always", 
+      inline: "echo There is no new kernel"
+  else
+    config.vm.provision "check_new_kernel", type: "shell", run: "once", 
+      inline: "echo Installed new kernel", reboot: true
+    config.vm.provision "remove_old_kernels", type: "shell", run: "once", 
+      inline: remove_old_kernels
+    config.vm.provision "installed_new_kernel", type: "shell", run: "once", 
+      inline: "echo Running new kernel: $(uname -r)"
+  end
+  
+  # Net conf common
+  config.vm.provision "change_default_route", type: "shell", run: "always", sensitive: false, 
+    env: {"GW_IP" => $GW_IP}, inline: change_default_route
+  
+  # Prepare and install Python for Ansible
   config.vm.provision "install_python39", type: "shell", run: "once",
     inline: install_python39
 
   config.vm.provision "set_alternatives", type: "shell", run: "once",
     inline: set_alternatives
-
+  
+  # on host:
+  # python -m pip install --user ansible
+  # pip install --user argcomplete
+  # activate-global-python-argcomplete --user
+  # pip show ansible
+  # ansible --version
+  #config.vm.provision "play_ansible",  type: "ansible" do |ansible|
+  #  ansible.playbook = "playbook.yml
 end
