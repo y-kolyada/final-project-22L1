@@ -6,10 +6,11 @@
   Check: vagrant validate
 =end
 
-ENV["VAGRANT_EXPERIMENTAL"]="dependency_provisioners"
-ENV["VAGRANT_DOTFILE_PATH"]=".vagrant"
+ENV["VAGRANT_EXPERIMENTAL"] = "dependency_provisioners"
+ENV["VAGRANT_DOTFILE_PATH"] = ".vagrant"
 VAGRANT_VM_PROVIDER = "virtualbox"
 ANSIBLE_RAW_SSH_ARGS = []
+PRIVATE_KEY_PATH = []
 
 box = "centos/stream8"
 version = "20210210.0"
@@ -191,6 +192,7 @@ Vagrant.configure("2") do |config|
     groups.each do |conf|
       file.write "#{conf[:hostname]}\n"
       ANSIBLE_RAW_SSH_ARGS << "-o IdentityFile=#{ENV["VAGRANT_DOTFILE_PATH"]}/machines/#{conf[:hostname]}/#{VAGRANT_VM_PROVIDER}/private_key"
+      PRIVATE_KEY_PATH << "#{ENV["VAGRANT_DOTFILE_PATH"]}/machines/#{conf[:hostname]}/#{VAGRANT_VM_PROVIDER}/private_key"
     end
 
     # Make servers groups
@@ -218,7 +220,6 @@ Vagrant.configure("2") do |config|
       end
       file.write "#{conf[:hostname]}\n"
     end
-
     # in block file closed automatically
   end
   
@@ -272,12 +273,38 @@ Vagrant.configure("2") do |config|
 
       conf.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
         inline: get_current_default_kernel
-
-      conf.vm.provision "mark_provisioning", type: "shell", run: "always", 
-        inline: $mark_provisioning
-
+      
       conf.vm.provision "update_system", after: :all, type: "shell", run: "always", 
         inline: update_system
+
+      conf.vm.provision "ansible_raw_ssh_args_for_developers", type: "shell", 
+        privileged: false, run: "once" do |s|
+        pwd = Dir.getwd + "/" + ENV["VAGRANT_DOTFILE_PATH"]
+        # ENV["VAGRANT_DOTFILE_PATH"] = pwd
+        s.inline = <<-SHELL
+          echo "vagrant conf: #{pwd}"
+          echo "ansible.raw_ssh_args: #{ANSIBLE_RAW_SSH_ARGS}"
+        SHELL
+      end 
+
+      # Play Ansible
+      if index == devs.size-1 && ansible_playbook != ""        
+        #conf.ssh.private_key_path = ["~/.vagrant.d/insecure_private_key", ssh_key]
+        conf.ssh.private_key_path = PRIVATE_KEY_PATH    # Case 1: Vagrant keys for VM
+        #conf.ssh.private_key_path = [ssh_key]          # Case 2: Current user key for VM added to authorized_keys        
+        conf.ssh.insert_key = false
+        conf.vm.provision "play_ansible_for_developers", type: "ansible", 
+          run: "always" do |ansible|
+          ansible.inventory_path = ansible_inventory_path
+          ansible.verbose = "v"
+          ansible.limit = "development"
+          #ansible.raw_ssh_args = ANSIBLE_RAW_SSH_ARGS  # Case 3: Ansible ssh options using Vagrant keys for VM
+          ansible.playbook = ansible_playbook
+        end
+      end
+
+      conf.vm.provision "mark_provisioning", type: "shell", run: "always", 
+      inline: $mark_provisioning
     end  
   end
   
@@ -315,36 +342,19 @@ Vagrant.configure("2") do |config|
       # Net conf base
       guest_ip = server[:guest_ip] ? server[:guest_ip] : IP_PREFFIX + "#{IP_SUFFIX + i}"
       conf.vm.network "public_network", bridge: 'enp8s0', ip: guest_ip
-      
-      #conf.vm.provision "file", source: "~/.ssh/id_rsa.pub", destination: "~/.ssh/id_rsa.pub"
+
+      conf.vm.provision "add_ssh_public_key_for_ansible", type: "shell", privileged: false,       # Case 1
+        run: "never" do |s|
+        ssh_pub_key = File.readlines("#{Dir.home}/.ssh/id_rsa.pub").first.strip
+        s.inline = <<-SHELL
+          echo #{ssh_pub_key} >> /home/vagrant/.ssh/authorized_keys          
+        SHELL
+      end
+      #conf.vm.provision "file", source: ssh_key + ".pub", destination: "~/.ssh/authorized_keys"  # Case 2
+      #conf.vm.provision "file", source: ssh_key + ".pub", destination: "~/.ssh/id_rsa.pub"       # Case 3
       #conf.vm.provision "add_ssh_public_key_for_ansible", type: "shell", run: "once", privileged: false, 
       #  inline: add_ssh_public_key_for_ansible
-
-
-      #conf.vm.provision "add_ssh_public_key_for_ansible", type: "shell", privileged: false, 
-      #  run: "never" do |s|
-      #  ssh_pub_key = File.readlines("#{Dir.home}/.ssh/id_rsa.pub").first.strip
-      #  s.inline = <<-SHELL
-      #    echo #{ssh_pub_key} >> /home/vagrant/.ssh/authorized_keys          
-      #  SHELL
-      #end
-
-
-      conf.vm.provision "shell", privileged: false, run: "once" do |s|
-        private_key_path = conf.ssh.private_key_path
-        pwd = File.basename(Dir.getwd) + "/.vagrant"
-        ENV["VAGRANT_DOTFILE_PATH"] = pwd
-        s.inline = <<-SHELL
-          echo #{private_key_path}
-          echo #{pwd}
-          echo #{ANSIBLE_RAW_SSH_ARGS}
-        SHELL
-      end 
-
-      #conf.ssh.private_key_path = ["~/.vagrant.d/insecure_private_key", ssh_key]
-      #conf.ssh.insert_key = false
-      #conf.vm.provision "file", source: ssh_key + ".pub", destination: "~/.ssh/authorized_keys"
-
+  
       # OS Conf base
       conf.vm.provision "set_server_multi_user_target", type: "shell", run: "once", 
         inline: set_server_multi_user_target
@@ -352,25 +362,36 @@ Vagrant.configure("2") do |config|
       conf.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
         inline: get_current_default_kernel
 
-      conf.vm.provision "mark_provisioning", type: "shell", run: "always", 
-        inline: $mark_provisioning
-
       conf.vm.provision "update_system", after: :all, type: "shell", 
         after: "mark_provisioning", run: "always", inline: update_system
 
+      conf.vm.provision "ansible_raw_ssh_args_for_servers", type: "shell", 
+        privileged: false, run: "once" do |s|        
+        pwd = Dir.getwd + "/" + ENV["VAGRANT_DOTFILE_PATH"]
+        # ENV["VAGRANT_DOTFILE_PATH"] = pwd
+        s.inline = <<-SHELL
+          echo "vagrant conf: #{pwd}"
+          echo "ansible.raw_ssh_args: #{ANSIBLE_RAW_SSH_ARGS}"
+        SHELL
+      end 
+
       # Play Ansible
-      if index == servers.size-4 && ansible_playbook != ""
-        # conf.vm.provision "play_ansible_for_severs1", type:"shell", inline: "echo !!!#{index}"
-        # conf.vm.provision :ansible do |ansible|
+      if index == servers.size-1 && ansible_playbook != ""        
+        #conf.ssh.private_key_path = ["~/.vagrant.d/insecure_private_key", ssh_key]
+        conf.ssh.private_key_path = PRIVATE_KEY_PATH    # Case 1: Vagrant keys for VM
+        #conf.ssh.private_key_path = [ssh_key]          # Case 2: Current user key for VM added to authorized_keys        
+        conf.ssh.insert_key = false
         conf.vm.provision "play_ansible_for_severs", type: "ansible", run: "always" do |ansible|
           ansible.inventory_path = ansible_inventory_path
           ansible.verbose = "v"
-          ansible.limit = "integration"
-          ansible.raw_ssh_args = ANSIBLE_RAW_SSH_ARGS
+          ansible.limit = "all"
+          #ansible.raw_ssh_args = ANSIBLE_RAW_SSH_ARGS  # Case 3: Ansible ssh options using Vagrant keys for VM
           ansible.playbook = ansible_playbook
         end
       end
 
+      conf.vm.provision "mark_provisioning", type: "shell", run: "always", 
+      inline: $mark_provisioning
     end
   end  
 
@@ -418,5 +439,4 @@ Vagrant.configure("2") do |config|
   # config.vm.provision "play_ansible",  type: "ansible" do |ansible|
   #   ansible.playbook = "playbook.yml"
   # end
- 
 end
