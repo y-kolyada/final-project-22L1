@@ -1,0 +1,14 @@
+---
+- name: Delete User Accounts Playbook
+  vars_files:
+    - inventory/group_vars/all
+  hosts: "{{ host_or_group }}"
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Delete Users Task
+      ansible.builtin.user:
+        name: "{{ item }}"
+        state: absent
+        remove: true
+      loop: "{{ users }}"
