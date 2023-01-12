@@ -12,9 +12,11 @@ VAGRANT_VM_PROVIDER = "virtualbox"
 ANSIBLE_RAW_SSH_ARGS = []
 PRIVATE_KEY_PATH = []
 
+
 box = "centos/stream8"
 version = "20210210.0"
-            
+time_zone = "Europe/Kyiv"
+
 ssh_key = "~/.ssh/id_rsa"
 
 ansible_playbook = "ansible/playbook.yml"
@@ -22,18 +24,24 @@ ansible_inventory_path = "ansible/inventory/hosts"
 ansible_user = "vagrant"
 
 servers = [
-  { :hostname => "dev", :box => "centos/stream8", :version => "20210210.0", 
+  { :hostname => "dev", :box => "centos/stream8", :version => "20210210.0",
     :ram => 3072, :cpu => 2, :host_port => 22251, :guest_ip => "10.0.10.51",
     :group => "integration" },
-  { :hostname => "qa", :box => "centos/stream8", :version => "20210210.0", 
+  { :hostname => "qa", :box => "centos/stream8", :version => "20210210.0",
     :ram => 3072, :cpu => 2, :host_port => 22252, :guest_ip => "10.0.10.52",
     :group => "integration" },
-  { :hostname => "integ", :box => "centos/stream8", :version => "20210210.0", 
+  { :hostname => "integ", :box => "centos/stream8", :version => "20210210.0",
     :ram => 3072, :cpu => 2, :host_port => 22253, :guest_ip => "10.0.10.53",
     :group => "integration" },
-  { :hostname => "prod", :box => "centos/stream8", :version => "20210210.0", 
+  { :hostname => "prod", :box => "centos/stream8", :version => "20210210.0",
     :ram => 3072, :cpu => 2, :host_port => 22254, :guest_ip => "10.0.10.54",
-    :group => "deploy" }
+    :group => "deploy" },
+  { :hostname => "jenkins", :box => "centos/stream8", :version => "20210210.0",
+    :ram => 3072, :cpu => 2, :host_port => 22255, :guest_ip => "10.0.10.55",
+    :group => "infra" },
+  { :hostname => "gitlab", :box => "centos/stream8", :version => "20210210.0",
+    :ram => 3072, :cpu => 2, :host_port => 22256, :guest_ip => "10.0.10.56",
+    :group => "infra" }
 ]
 
 devs = [
@@ -57,6 +65,10 @@ add_ssh_public_key_for_ansible = <<-SHELL
   umask 077 
   test -d ~/.ssh || mkdir .ssh
   cat ~/.ssh/id_rsa.pub >> .ssh/authorized_keys
+SHELL
+
+sync_current_time = <<-SHELL
+  systemctl restart chronyd
 SHELL
 
 set_server_multi_user_target = <<-SHELL
@@ -220,6 +232,7 @@ Vagrant.configure("2") do |config|
       end
       file.write "#{conf[:hostname]}\n"
     end
+
     # in block file closed automatically
   end
   
@@ -234,6 +247,7 @@ Vagrant.configure("2") do |config|
       conf.vm.box = box_image.to_s
       conf.vm.box_version = box_version.to_s
       conf.vm.host_name = dev[:hostname]
+      conf.vm.provision "shell", inline: "timedatectl set-timezone #{time_zone}"
       
       cpu = dev[:cpu] ? dev[:cpu] : 1;
       memory = dev[:ram] ? dev[:ram] : 512
@@ -248,6 +262,10 @@ Vagrant.configure("2") do |config|
       end
 
       # SSH conf
+      
+      # Generate a new SSH key pair for each VM: ssh.insert_key = true
+      conf.ssh.insert_key = true
+      
       host_port = dev[:host_port] ? dev[:host_port] : "222#{SSH_PORT_SUFFIX + 10 + i}"
       conf.vm.network :forwarded_port, guest: 22, host: host_port.to_s, 
         host_ip: "127.0.0.1", id: "ssh"
@@ -288,7 +306,9 @@ Vagrant.configure("2") do |config|
       end 
 
       # Play Ansible
+
       if index == devs.size-1 && ansible_playbook != ""        
+      #if ansible_playbook != ""        
         #conf.ssh.private_key_path = ["~/.vagrant.d/insecure_private_key", ssh_key]
         conf.ssh.private_key_path = PRIVATE_KEY_PATH    # Case 1: Vagrant keys for VM
         #conf.ssh.private_key_path = [ssh_key]          # Case 2: Current user key for VM added to authorized_keys        
@@ -319,6 +339,7 @@ Vagrant.configure("2") do |config|
       conf.vm.box = box_image.to_s
       conf.vm.box_version = box_version.to_s
       conf.vm.host_name = server[:hostname]
+      conf.vm.provision "shell", inline: "timedatectl set-timezone #{time_zone}"
       
       cpu = server[:cpu] ? server[:cpu] : 1;
       memory = server[:ram] ? server[:ram] : 512
@@ -333,8 +354,10 @@ Vagrant.configure("2") do |config|
       end
 
       # SSH conf
-      # Generate a new SSH key for each VM
+      
+      # Generate a new SSH key pair for each VM: ssh.insert_key = true
       conf.ssh.insert_key = true
+      
       host_port = server[:host_port] ? server[:host_port] : "222#{SSH_PORT_SUFFIX + i}"
       conf.vm.network :forwarded_port, guest: 22, host: host_port.to_s, 
         host_ip: "127.0.0.1", id: "ssh"
@@ -376,12 +399,14 @@ Vagrant.configure("2") do |config|
       end 
 
       # Play Ansible
+
       if index == servers.size-1 && ansible_playbook != ""        
+      #if ansible_playbook != ""        
         #conf.ssh.private_key_path = ["~/.vagrant.d/insecure_private_key", ssh_key]
-        conf.ssh.private_key_path = PRIVATE_KEY_PATH    # Case 1: Vagrant keys for VM
+        #conf.ssh.private_key_path = PRIVATE_KEY_PATH  | [ssh_key]  # Case 1: Vagrant keys for VM
         #conf.ssh.private_key_path = [ssh_key]          # Case 2: Current user key for VM added to authorized_keys        
         conf.ssh.insert_key = false
-        conf.vm.provision "play_ansible_for_severs", type: "ansible", run: "always" do |ansible|
+        conf.vm.provision "play_ansible_for_servers", type: "ansible", run: "always" do |ansible|
           ansible.inventory_path = ansible_inventory_path
           ansible.verbose = "v"
           ansible.limit = "all"
@@ -401,6 +426,9 @@ Vagrant.configure("2") do |config|
   end
 
   # OS Conf common
+  config.vm.provision "sync_current_time", type: "shell", run: "once", 
+    inline: sync_current_time
+
   config.vm.provision "update_kernel", type: "shell", run: "never", 
     inline: update_kernel
   
@@ -439,4 +467,5 @@ Vagrant.configure("2") do |config|
   # config.vm.provision "play_ansible",  type: "ansible" do |ansible|
   #   ansible.playbook = "playbook.yml"
   # end
+ 
 end
