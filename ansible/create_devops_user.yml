@@ -1,12 +1,13 @@
 ---
-- name: Create DevOps User Playbook
+- name: Create DevOps Users Playbook
   vars_files:
-    - inventory/group_vars/development
+    - inventory/group_vars/infra
+    #- inventory/group_vars/development
   hosts: "{{ host_or_group }}"
   gather_facts: false
   become: true
   tasks:
-    - name: Create DevOps User Task
+    - name: Create DevOps Users Task
       ansible.builtin.user:
         name: "{{ item }}"
         state: present
@@ -18,7 +19,7 @@
         expires: -1
       loop: "{{ devops_users }}"
 
-    - name: Install SSH Key Task
+    - name: Install SSH Key for devops 1 Users Task
       ansible.posix.authorized_key:        
         user: devops
         state: present
@@ -33,3 +34,10 @@
         dest: /etc/sudoers.d/devops
         content: 'devops ALL=(ALL) NOPASSWD: ALL'
         validate: /usr/sbin/visudo -cf %s
+
+    - name: Resolve "[sss_cache] [sysdb_domain_cache_connect] (0x0010)" Error Task
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      with_items: 
+        - /var/lib/sss/db/cache_implicit_files.ldb

@@ -1,7 +1,8 @@
 ---
 - name: Create New Users Playbook
   vars_files:
-    - inventory/group_vars/all
+    - inventory/group_vars/infra
+    #- inventory/group_vars/all
   hosts: "{{ host_or_group }}"
   gather_facts: false
   become: true

@@ -1,7 +1,8 @@
 ---
-- name: Activate Firewall Playbook
-  vars_files:    
-    - inventory/group_vars/development
+- name: Activate Firewall and SSH traffic Playbook
+  vars_files:
+    - inventory/group_vars/infra
+    # - inventory/group_vars/development
   hosts: "{{ host_or_group }}"
   gather_facts: true
   become: true
@@ -23,13 +24,6 @@
     - name: Permit SSH traffic in default zone Task
       ansible.posix.firewalld:
         service: ssh
-        permanent: true
-        immediate: true
-        state: enabled
-
-    - name: Permit Tomcat traffic in default zone Task
-      ansible.posix.firewalld:
-        port: 8080/tcp
         permanent: true
         immediate: true
         state: enabled

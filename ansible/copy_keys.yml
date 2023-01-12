@@ -1,14 +1,15 @@
 ---
 - name: Add SSH Keys to hosts Playbook
   vars_files:
-    - inventory/group_vars/all
+    - inventory/group_vars/infra
+    #- inventory/group_vars/all
   hosts: "{{ host_or_group }}"
   gather_facts: false
   become: true
   tasks:
-  - name: Install SSH Keys Task
-    ansible.posix.authorized_key:
-      user: "{{ item }}"
-      state: present
-      key: "{{ lookup('file', '/home/{{ item }}/.ssh/id_rsa.pub') }}"
-    loop: "{{ users }}"
+    - name: Install SSH Keys Task
+      ansible.posix.authorized_key:
+        user: "{{ item }}"
+        state: present
+        key: "{{ lookup('file', '/home/{{ item }}/.ssh/id_rsa.pub') }}"
+      loop: "{{ users }}"
