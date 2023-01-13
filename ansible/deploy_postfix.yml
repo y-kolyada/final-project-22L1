@@ -1,0 +1,177 @@
+---
+- name: Deploy Postfix and Dovecot for GitLab Playbook
+# Key "key_name" should be generated before run this Playbook
+# Certificate "certificate" should be generated before run this Playbook
+
+  vars_files:
+    - inventory/group_vars/infra
+  vars:
+    myhostname: gitlab.ygorod.com
+    mydomain: ygorod.com
+    org_name: "Your Organization"
+    mynetworks: "10.0.10.0"    
+    key_name: "ssl/private/mail_private_key.pem"    
+    certificate: "ssl/certs/mail_certificate.pem"
+  # hosts: "{{ host_or_group }}"
+  hosts: gitlab
+  gather_facts: true
+  become: true
+  remote_user: devops
+  tasks:
+
+    - name: Change Hostname to {{ myhostname }} Task
+      ansible.builtin.hostname:
+        name: "{{ myhostname }}"
+
+    - name: Install epel repo Task
+      ansible.builtin.yum:
+        name: 
+          - epel-release
+        # update_cache: yes
+        state: present
+
+    - name: Install mod_ssl, postfix, bind-utils, dovecot, mailx Task
+      ansible.builtin.yum:
+        name:
+          - mod_ssl
+          - postfix
+          - bind-utils
+          - dovecot
+          - mailx
+        state: latest
+
+    - name: Copy Dovecot Private key Task
+      ansible.builtin.copy:
+        src: "{{ key_name }}"
+        dest: /etc/pki/dovecot/private/dovecot.pem
+        force: true
+        mode: 0600
+
+    - name: Copy Dovecot Certificate Task
+      ansible.builtin.copy:
+        src: "{{ certificate }}"
+        dest: /etc/pki/dovecot/certs/dovecot.pem
+        force: true
+        mode: 0644
+    
+    - name: Copy Postfix Private key Task
+      ansible.builtin.copy:
+        remote_src: true
+        src: /etc/pki/dovecot/private/dovecot.pem
+        dest: /etc/pki/tls/private/postfix.key
+        force: true
+        mode: 0600
+
+    - name: Copy Postfix Certificate Task
+      ansible.builtin.copy:
+        remote_src: true
+        src: /etc/pki/dovecot/certs/dovecot.pem
+        dest: /etc/pki/tls/certs/postfix.pem
+        force: true
+        mode: 0644
+
+    - name: Set correct "ssl_key" for Dovecot Task
+      ansible.builtin.lineinfile:
+        dest: /etc/dovecot/conf.d/10-ssl.conf
+        regexp: "^ssl_key = .*"
+        line: "ssl_key = </etc/pki/dovecot/private/dovecot.pem"
+
+    - name: Set correct "ssl_cert" for Dovecot Task
+      ansible.builtin.lineinfile:
+        dest: /etc/dovecot/conf.d/10-ssl.conf
+        regexp: "^ssl_cert = .*"
+        line: "ssl_cert = </etc/pki/dovecot/certs/dovecot.pem"
+
+    - name: Set correct "smtpd_tls_key_file" for Postfix Task
+      ansible.builtin.lineinfile:
+        dest: /etc/postfix/main.cf
+        regexp: "^smtpd_tls_key_file = .*"
+        line: "smtpd_tls_key_file = /etc/pki/tls/private/postfix.key"
+
+    - name: Set correct "smtpd_tls_cert_file" for Postfix Task
+      ansible.builtin.lineinfile:
+        dest: /etc/postfix/main.cf
+        regexp: "^smtpd_tls_cert_file = .*"
+        line: "smtpd_tls_cert_file = /etc/pki/tls/certs/postfix.pem"
+
+    - name: Set correct "myhostname" for mail server Task
+      ansible.builtin.lineinfile:
+        dest: /etc/postfix/main.cf
+        regexp: "^myhostname = .*"
+        line: "myhostname = {{ myhostname }}"
+
+    - name: Set correct "mydomain" {{ mydomain }} for mail server Task
+      ansible.builtin.lineinfile:
+        dest: /etc/postfix/main.cf
+        regexp: "^mydomain = .*"
+        line: "mydomain = {{ mydomain }}"
+
+    - name: Set "myorigin" for mail server to {{ mydomain }} Task
+      ansible.builtin.lineinfile:
+        dest: /etc/postfix/main.cf
+        regexp: "^myorigin = .*"
+        line: "myorigin = {{ mydomain }}"
+
+    - name: Set "inet_interfaces" for mail server to "all" Task
+      ansible.builtin.lineinfile:
+        dest: /etc/postfix/main.cf
+        regexp: "^inet_interfaces = .*"
+        line: "inet_interfaces = all"
+
+    - name: Set correct "mydestination" for mail server Task
+      ansible.builtin.lineinfile:
+        dest: /etc/postfix/main.cf
+        regexp: "^mydestination = .*"
+        line: "mydestination = {{ myhostname }}, localhost.{{ mydomain }}, localhost, {{ mydomain }}"
+
+    - name: Set "mynetworks" for mail server Task
+      ansible.builtin.lineinfile:
+        dest: /etc/postfix/main.cf
+        regexp: "^mynetworks = .*"
+        line: "mynetworks = {{ mynetworks }}/24, 127.0.0.0/8"
+
+    - name: Set "home_mailbox" for mail server Task
+      ansible.builtin.lineinfile:
+        dest: /etc/postfix/main.cf
+        regexp: "^home_mailbox = .*"
+        line: "home_mailbox = Maildir/"
+
+    - name: Restart postfix and enable it on startup Task
+      ansible.builtin.service: 
+        name: postfix 
+        state: restarted
+        enabled: true
+
+    - name: Set "mail_location" for imap server Task
+      ansible.builtin.lineinfile:
+        dest: /etc/dovecot/conf.d/10-mail.conf
+        regexp: "^mail_location = .*"
+        line: "mail_location = maildir:~/Maildir"
+
+    - name: Restart dovecot and enable it on startup Task
+      ansible.builtin.service: 
+        name: dovecot 
+        state: restarted 
+        enabled: true
+
+    - name: Permit SMTP traffic Task
+      ansible.posix.firewalld:
+        service: smtp
+        permanent: true
+        immediate: true
+        state: enabled
+
+    - name: Permit SMTP, POP3, IMAP, SMTP Sec, MSA, IMAP Sec, POP3 Sec traffic Task
+      ansible.posix.firewalld:
+        port: "{{ item }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      with_items:
+        - 25/tcp
+        - 110/tcp
+        - 143/tcp
+        - 465/tcp
+        - 587/tcp
+        - 993/tcp
+        - 995/tcp
