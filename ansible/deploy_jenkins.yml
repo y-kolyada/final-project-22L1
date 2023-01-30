@@ -1,0 +1,121 @@
+---
+- name: Deploy Jenkins Playbook
+  vars_files:
+    - inventory/group_vars/infra
+  vars:
+    download_url: https://pkg.jenkins.io/redhat-stable/jenkins.repo
+    key_url: https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+    YOURPORT: 8080
+    PERM: "--permanent"
+    SERV: "--service=jenkins"
+  hosts: "{{ host_or_group }}"
+  gather_facts: true
+  become: true
+  tasks:
+
+    - name: Check if Jenkins Package is installed
+      command: dnf list jenkins
+      register: installed_jenkins
+      changed_when: installed_jenkins.rc!=0
+
+    - name: Install wget Package Task
+      ansible.builtin.dnf:
+        name:
+          - wget
+        state: latest
+      when: installed_jenkins.rc==1
+
+    - name: Fetch java version Task
+      ansible.builtin.shell: java -version      
+      register: register_java
+      changed_when: false
+
+    - name: Download Jenkins repo Task
+      ansible.builtin.shell: wget -O /etc/yum.repos.d/jenkins.repo {{ download_url }}
+      when: installed_jenkins.rc==1
+
+    - name: Download Jenkins PGP Public Key Task
+      ansible.builtin.shell: rpm --import {{ key_url }}
+      when: installed_jenkins.rc==1
+
+    - name: Install Jenkins Package Task
+      ansible.builtin.dnf:
+        name:
+          - jenkins
+        update_cache: true
+        state: latest
+      when: installed_jenkins.rc==1
+
+    - name: Populate Jenkins service facts Task
+      ansible.builtin.service_facts:
+
+    - name: Print Jenkins service facts Task
+      ansible.builtin.debug:
+        var: ansible_facts.services['jenkins.service'].state
+
+    - name: Start Jenkins Service Task
+      ansible.builtin.service:
+        name: jenkins
+        state: started
+        enabled: true      
+      when: ansible_facts.services['jenkins.service'].state != 'running'
+
+    - name: Fetch Jenkins version Task
+      ansible.builtin.shell: jenkins --version      
+      register: jenkins_version
+      when: installed_jenkins.rc==0
+      changed_when: false
+
+    - name: Print Jenkins facts Task
+      ansible.builtin.debug:
+        var: jenkins_version['stdout']
+      when: installed_jenkins.rc==0
+
+    - name: Check Jenkins AdminPassword file exists Task
+      stat:
+        path: "/var/lib/jenkins/secrets/initialAdminPassword"
+      register: password_exists
+
+    - name: Get Jenkins AdminPassword Task
+      ansible.builtin.command:
+        cmd: cat "/var/lib/jenkins/secrets/initialAdminPassword"
+      register: jenkins_password
+      changed_when: true
+      when: password_exists.stat.exists
+
+    - name: Print Jenkins AdminPassword Task
+      ansible.builtin.debug:
+        var: jenkins_password['stdout']
+      when: password_exists.stat.exists
+
+    - name: Get open services on Firewalld Task
+      ansible.builtin.command:
+        cmd: firewall-cmd --list-ports
+      register: open_ports
+      changed_when: false
+
+    - name: Permit traffic in default zone for SSH, HTTP, Jenlins service Task
+      ansible.posix.firewalld:
+        zone: "{{item.zone}}"
+        port: "{{item.port}}/{{item.proto}}"
+        state: "{{item.state}}"
+        permanent: true
+      with_items:
+        - {port: "22", proto: "tcp", state: "enabled", zone: "public"}
+        - {port: "80", proto: "tcp", state: "enabled", zone: "public"}
+        - {port: "8080", proto: "tcp", state: "enabled", zone: "public"}
+      when: '"8080" not in open_ports.stdout'
+    
+    - name: Start Firewalld Service Task
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: true      
+      when: ansible_facts.services['firewalld.service'].state != 'running'
+
+    - name: Populate Firewalld service facts Task
+      ansible.builtin.service_facts:
+
+    - name: Print Firewalld service facts Task
+      ansible.builtin.debug:
+        var: ansible_facts.services['firewalld.service'].state
