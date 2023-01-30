@@ -15,7 +15,7 @@ PRIVATE_KEY_PATH = []
 
 box = "centos/stream8"
 version = "20210210.0"
-time_zone = "Europe/Kyiv"
+time_zone = "Europe/Kiev"
 
 ssh_key = "~/.ssh/id_rsa"
 
@@ -41,6 +41,9 @@ servers = [
     :group => "infra" },
   { :hostname => "gitlab", :box => "centos/stream8", :version => "20210210.0",
     :ram => 3072, :cpu => 2, :host_port => 22256, :guest_ip => "10.0.10.56",
+    :group => "infra" },
+  { :hostname => "gitlab1", :box => "centos/stream8", :version => "20210210.0",
+    :ram => 3072, :cpu => 2, :host_port => 22257, :guest_ip => "10.0.10.57",
     :group => "infra" }
 ]
 
@@ -57,8 +60,8 @@ $GW_IP = "10.0.10.1"
 $HOST_IP = "10.0.10.2"
 
 $mark_provisioning = <<-'SHELL'
- echo "\"$USER\" provisioned the guest at: " > /etc/vagrant_provisioned_at
- date >> /etc/vagrant_provisioned_at 
+  echo "\"$USER\" provisioned the guest at: " > /etc/vagrant_provisioned_at
+  date >> /etc/vagrant_provisioned_at 
 SHELL
 
 add_ssh_public_key_for_ansible = <<-SHELL
@@ -120,6 +123,20 @@ update_system = <<-SHELL
   VAGRANT_ERROR=$?
 SHELL
 
+set_timezone = <<-SHELL
+  timedatectl set-timezone #{time_zone}
+  timedatectl
+  # timedatectl list-timezones | grep Europe/K[y,i][i,e]v
+SHELL
+
+resize_filesystem = <<-SHELL
+  dnf install cloud-utils-growpart gdisk -y
+  growpart /dev/sda 1
+  xfs_growfs /
+  lsblk
+  df -Th /
+SHELL
+
 change_default_route = <<-SHELL
   echo "GW_IP: ${GW_IP}"
   RM_ROUTE=$(ip route | grep "default via 10.0.2.2 dev eth0")
@@ -134,7 +151,7 @@ SHELL
 
 install_virtualbox_guets_additions = <<-SHELL
   #dnf install -y gcc make perl kernel-devel kernel-headers bzip2 dkms
-  dnf install -y epel-release
+  dnf install -y epel-release wget
   dnf install -y gcc make perl kernel-devel kernel-headers bzip2 dkms
   rpm -q kernel
   wget -q https://download.virtualbox.org/virtualbox/7.0.4/VBoxGuestAdditions_7.0.4.iso -P /tmp
@@ -247,7 +264,7 @@ Vagrant.configure("2") do |config|
       conf.vm.box = box_image.to_s
       conf.vm.box_version = box_version.to_s
       conf.vm.host_name = dev[:hostname]
-      conf.vm.provision "shell", inline: "timedatectl set-timezone #{time_zone}"
+      conf.vm.provision "Set timezone",  type: "shell", inline: "timedatectl set-timezone #{time_zone}"
       
       cpu = dev[:cpu] ? dev[:cpu] : 1;
       memory = dev[:ram] ? dev[:ram] : 512
@@ -275,7 +292,7 @@ Vagrant.configure("2") do |config|
       conf.vm.network "public_network", bridge: 'enp8s0', ip: guest_ip
 
       conf.vm.provision "add_ssh_public_key_for_ansible", type: "shell", privileged: false, 
-        run: "never" do |s|
+        run: "once" do |s|
         ssh_pub_key = File.readlines("#{Dir.home}/.ssh/id_rsa.pub").first.strip
         s.inline = <<-SHELL
           echo #{ssh_pub_key} >> /home/vagrant/.ssh/authorized_keys          
@@ -292,8 +309,11 @@ Vagrant.configure("2") do |config|
       conf.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
         inline: get_current_default_kernel
       
-      conf.vm.provision "update_system", after: :all, type: "shell", run: "always", 
+      conf.vm.provision "update_system", after: :all, type: "shell", run: "never", 
         inline: update_system
+      
+      config.vm.provision "resize_filesystem", type: "shell", run: "never", 
+        inline: resize_filesystem
 
       conf.vm.provision "ansible_raw_ssh_args_for_developers", type: "shell", 
         privileged: false, run: "once" do |s|
@@ -339,7 +359,8 @@ Vagrant.configure("2") do |config|
       conf.vm.box = box_image.to_s
       conf.vm.box_version = box_version.to_s
       conf.vm.host_name = server[:hostname]
-      conf.vm.provision "shell", inline: "timedatectl set-timezone #{time_zone}"
+      #conf.vm.provision "shell", inline: "timedatectl set-timezone 'Europe/Kiev'"
+      conf.vm.provision "Set timezone",type: "shell", inline: "timedatectl set-timezone #{time_zone}"
       
       cpu = server[:cpu] ? server[:cpu] : 1;
       memory = server[:ram] ? server[:ram] : 512
@@ -367,7 +388,7 @@ Vagrant.configure("2") do |config|
       conf.vm.network "public_network", bridge: 'enp8s0', ip: guest_ip
 
       conf.vm.provision "add_ssh_public_key_for_ansible", type: "shell", privileged: false,       # Case 1
-        run: "never" do |s|
+        run: "once" do |s|
         ssh_pub_key = File.readlines("#{Dir.home}/.ssh/id_rsa.pub").first.strip
         s.inline = <<-SHELL
           echo #{ssh_pub_key} >> /home/vagrant/.ssh/authorized_keys          
@@ -379,14 +400,14 @@ Vagrant.configure("2") do |config|
       #  inline: add_ssh_public_key_for_ansible
   
       # OS Conf base
-      conf.vm.provision "set_server_multi_user_target", type: "shell", run: "once", 
+      conf.vm.provision "set_server_multi_user_target", type: "shell", run: "never", 
         inline: set_server_multi_user_target
 
       conf.vm.provision "get_current_default_kernel", type: "shell", run: "always", 
         inline: get_current_default_kernel
 
       conf.vm.provision "update_system", after: :all, type: "shell", 
-        after: "mark_provisioning", run: "always", inline: update_system
+        after: "mark_provisioning", run: "never", inline: update_system
 
       conf.vm.provision "ansible_raw_ssh_args_for_servers", type: "shell", 
         privileged: false, run: "once" do |s|        
@@ -396,16 +417,19 @@ Vagrant.configure("2") do |config|
           echo "vagrant conf: #{pwd}"
           echo "ansible.raw_ssh_args: #{ANSIBLE_RAW_SSH_ARGS}"
         SHELL
-      end 
+      end
 
       # Play Ansible
-
+      
       if index == servers.size-1 && ansible_playbook != ""        
       #if ansible_playbook != ""        
         #conf.ssh.private_key_path = ["~/.vagrant.d/insecure_private_key", ssh_key]
         #conf.ssh.private_key_path = PRIVATE_KEY_PATH  | [ssh_key]  # Case 1: Vagrant keys for VM
         #conf.ssh.private_key_path = [ssh_key]          # Case 2: Current user key for VM added to authorized_keys        
-        conf.ssh.insert_key = false
+        # Disable only when private key for each VM is generated and 
+        # you want to exec Ansible playbook: ssh.insert_key = false
+        # conf.ssh.insert_key = false
+
         conf.vm.provision "play_ansible_for_servers", type: "ansible", run: "always" do |ansible|
           ansible.inventory_path = ansible_inventory_path
           ansible.verbose = "v"
@@ -434,6 +458,9 @@ Vagrant.configure("2") do |config|
   
   config.vm.provision "remove_old_kernels", type: "shell", run: "once", 
     env: {"VAGRANT_ERROR" => 0}, inline: remove_old_kernels
+  
+  config.vm.provision "resize_filesystem", type: "shell", run: "never", 
+    inline: resize_filesystem
 
   if ENV["VAGRANT_ERROR"] != 0 then
     config.vm.provision "check_new_kernel", type: "shell", run: "always", 
@@ -457,6 +484,7 @@ Vagrant.configure("2") do |config|
 
   config.vm.provision "set_alternatives", type: "shell", run: "once",
     inline: set_alternatives
+
   
   # on host:
   # python -m pip install --user ansible
