@@ -1,0 +1,27 @@
+---
+- name: Deploy Java 8 Playbook
+  vars_files:    
+    - inventory/group_vars/infra
+  vars:
+    java: java-1.8.0-openjdk-devel
+  hosts: "{{ host_or_group }}"
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Fetch java version Task
+      ansible.builtin.shell: java -version
+      changed_when: False
+      register: java_result
+      failed_when: False
+  
+    - name: Install {{ java }} Package Task
+      ansible.builtin.yum:
+        name:
+          - "{{ java }}"
+        update_cache: yes
+        state: latest
+      when: java_result.rc!=0
+
+    - name: Print java facts Task
+      ansible.builtin.debug:
+        var: java_result
